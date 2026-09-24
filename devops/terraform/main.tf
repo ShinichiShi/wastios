@@ -57,3 +57,50 @@ resource "docker_container" "nexus" {
     external = 8082
   }
 }
+
+# Local stand-ins for Firebase (Firestore) and AWS S3 so the backend can boot
+# end-to-end in the demo cluster without real cloud credentials.
+
+resource "docker_image" "firestore_emulator" {
+  name = "mtlynch/firestore-emulator:latest"
+}
+
+resource "docker_container" "firestore_emulator" {
+  name  = "wastios-firestore-emulator"
+  image = docker_image.firestore_emulator.image_id
+
+  networks_advanced {
+    name = docker_network.devops.name
+  }
+
+  env = [
+    "FIRESTORE_PROJECT_ID=demo-wastios",
+  ]
+
+  ports {
+    internal = 8080
+    external = 8090
+  }
+}
+
+resource "docker_image" "s3mock" {
+  name = "adobe/s3mock:latest"
+}
+
+resource "docker_container" "s3mock" {
+  name  = "wastios-s3mock"
+  image = docker_image.s3mock.image_id
+
+  networks_advanced {
+    name = docker_network.devops.name
+  }
+
+  env = [
+    "initialBuckets=wastios-images",
+  ]
+
+  ports {
+    internal = 9090
+    external = 9090
+  }
+}

@@ -45,6 +45,12 @@ spec:
               value: {{ .Values.backend.port | quote }}
             - name: ML_SERVICE_URL
               value: "http://wastios-ml-service:{{ .Values.mlService.port }}/predict"
+            - name: NODE_ENV
+              value: "development"
+            - name: FIRESTORE_EMULATOR_HOST
+              value: {{ .Values.localEmulators.firestoreHost | quote }}
+            - name: AWS_ENDPOINT_URL_S3
+              value: {{ .Values.localEmulators.s3Endpoint | quote }}
           readinessProbe:
             httpGet:
               path: /health

@@ -18,17 +18,22 @@ mlService:
   port: 8000
   replicas: 1
 
-# Populate with real values to let the backend boot fully (Firebase + S3).
-# Left empty, the backend pod will crash-loop, which is a valid demo of
-# Alertmanager firing a "backend down" alert — see devops/docs/DEVOPS.md.
+# Defaults point at the local Firestore emulator + S3-mock containers
+# (devops/terraform) so the backend boots without real cloud credentials.
+# Swap these for real Firebase/AWS values to use the real services instead.
 backendSecret:
-  FIREBASE_PROJECT_ID: ""
+  FIREBASE_PROJECT_ID: "demo-wastios"
   FIREBASE_CLIENT_EMAIL: ""
   FIREBASE_PRIVATE_KEY: ""
   FIREBASE_STORAGE_BUCKET: ""
-  AWS_ACCESS_KEY_ID: ""
-  AWS_SECRET_ACCESS_KEY: ""
-  S3_BUCKET_NAME: ""
+  AWS_ACCESS_KEY_ID: "test"
+  AWS_SECRET_ACCESS_KEY: "test"
+  S3_BUCKET_NAME: "wastios-images"
+
+# Host-side local emulators, reached from inside minikube via host.minikube.internal.
+localEmulators:
+  firestoreHost: "host.minikube.internal:8090"
+  s3Endpoint: "http://host.minikube.internal:9090"
 
 ingress:
   host: wastios.local
