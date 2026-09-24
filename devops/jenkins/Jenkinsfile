@@ -11,9 +11,10 @@ pipeline {
     DOCKER_HOST   = 'unix:///home/shinichi/.docker/desktop/docker.sock'
     KUBECONFIG    = '/home/shinichi/.kube/config'
     MINIKUBE_HOME = '/home/shinichi'
-    // sonar-scanner needs JDK 21+; Jenkins itself runs on JDK 17, so point
-    // this stage's java explicitly rather than relying on Jenkins' own JAVA_HOME.
-    SONAR_SCANNER_JAVA_PATH = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'
+    // sonar-scanner needs JDK 21+; Jenkins itself runs on JDK 17 and the
+    // scanner's bundled JRE is also 17, so point JAVA_HOME at 21 explicitly
+    // (the scanner wrapper was patched locally to respect JAVA_HOME).
+    JAVA_HOME     = '/usr/lib/jvm/java-21-openjdk-amd64'
     PATH          = "/opt/sonar-scanner/bin:/usr/local/bin:${env.PATH}"
   }
 
@@ -46,8 +47,7 @@ pipeline {
               -Dsonar.projectKey=wastios \
               -Dsonar.sources=backend/src,backend/app.js,backend/server.js,frontend/src,ml_service \
               -Dsonar.host.url=http://localhost:9000 \
-              -Dsonar.login=$SONAR_TOKEN \
-              -Dsonar.scanner.javaExePath=$SONAR_SCANNER_JAVA_PATH
+              -Dsonar.login=$SONAR_TOKEN
           '''
         }
       }
