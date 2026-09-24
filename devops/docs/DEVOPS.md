@@ -6,6 +6,11 @@ frontend, FastAPI ml_service). The application code itself was not restructured 
 everything DevOps-related lives under `devops/`, plus three small additions to the app:
 `backend/Dockerfile`, `frontend/Dockerfile`, and a `/metrics` route in the backend.
 
+**Quick start**: `./start-devops.sh` from the repo root brings up the whole stack
+(Docker Desktop, Terraform services, minikube, Argo CD, monitoring) in one idempotent
+run — safe to re-run any time, e.g. after a reboot. It checks Jenkins but doesn't start
+it (native systemd service; `sudo systemctl start jenkins` if it's down).
+
 ## Why Maven isn't in the pipeline
 
 The originally requested flow started with Maven, but there is no Java code anywhere in
