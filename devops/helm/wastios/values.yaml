@@ -2,19 +2,19 @@ registry: localhost:8082
 
 backend:
   image: wastios-backend
-  tag: local
+  tag: "3"
   port: 3000
   replicas: 1
 
 frontend:
   image: wastios-frontend
-  tag: local
+  tag: "3"
   port: 80
   replicas: 1
 
 mlService:
   image: wastios-ml-service
-  tag: local
+  tag: "3"
   port: 8000
   replicas: 1
 
