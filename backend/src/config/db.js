@@ -35,7 +35,9 @@ function initFirebase() {
 async function connectDB() {
   initFirebase();
   // Lightweight query to verify Firestore connectivity.
-  await db.collection('__healthcheck__').limit(1).get();
+  // Note: collection IDs starting and ending with "__" are reserved by
+  // Firestore and rejected as INVALID_ARGUMENT, so this must avoid that pattern.
+  await db.collection('_internal_healthcheck').limit(1).get();
 }
 
 async function closeDB() {

@@ -17,6 +17,7 @@ venv/
 ml/checkpoints/
 *.pth
 *.pt
+!ml_service/model.pt
 
 # Terraform
 **/.terraform/
