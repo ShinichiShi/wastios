@@ -1,0 +1,104 @@
+pipeline {
+  agent any
+
+  environment {
+    REGISTRY   = 'localhost:8082'
+    IMAGE_TAG  = "${env.BUILD_NUMBER}"
+    VALUES_FILE = 'devops/helm/wastios/values.yaml'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build') {
+      parallel {
+        stage('backend') {
+          steps { dir('backend') { sh 'npm ci' } }
+        }
+        stage('frontend') {
+          steps { dir('frontend') { sh 'npm ci && npm run build' } }
+        }
+        stage('ml_service') {
+          steps { dir('ml_service') { sh 'python3 -m py_compile main.py model_loader.py schemas.py' } }
+        }
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+          sh '''
+            sonar-scanner \
+              -Dsonar.projectKey=wastios \
+              -Dsonar.sources=backend/src,backend/app.js,backend/server.js,frontend/src,ml_service \
+              -Dsonar.host.url=http://localhost:9000 \
+              -Dsonar.login=$SONAR_TOKEN
+          '''
+        }
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        sh """
+          docker build -t ${REGISTRY}/wastios-backend:${IMAGE_TAG} backend
+          docker build -t ${REGISTRY}/wastios-frontend:${IMAGE_TAG} frontend
+          docker build -t ${REGISTRY}/wastios-ml-service:${IMAGE_TAG} ml_service
+        """
+      }
+    }
+
+    stage('Trivy Scan') {
+      steps {
+        sh """
+          trivy image --exit-code 0 --severity HIGH,CRITICAL ${REGISTRY}/wastios-backend:${IMAGE_TAG}
+          trivy image --exit-code 0 --severity HIGH,CRITICAL ${REGISTRY}/wastios-frontend:${IMAGE_TAG}
+          trivy image --exit-code 0 --severity HIGH,CRITICAL ${REGISTRY}/wastios-ml-service:${IMAGE_TAG}
+        """
+      }
+    }
+
+    stage('Push to Nexus') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'nexus-registry', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+          sh """
+            echo \$NEXUS_PASS | docker login ${REGISTRY} -u \$NEXUS_USER --password-stdin
+            docker push ${REGISTRY}/wastios-backend:${IMAGE_TAG}
+            docker push ${REGISTRY}/wastios-frontend:${IMAGE_TAG}
+            docker push ${REGISTRY}/wastios-ml-service:${IMAGE_TAG}
+          """
+        }
+      }
+    }
+
+    stage('Load into Minikube') {
+      // Local-cluster stand-in for a real cluster pulling from the registry directly.
+      steps {
+        sh """
+          minikube image load ${REGISTRY}/wastios-backend:${IMAGE_TAG}
+          minikube image load ${REGISTRY}/wastios-frontend:${IMAGE_TAG}
+          minikube image load ${REGISTRY}/wastios-ml-service:${IMAGE_TAG}
+        """
+      }
+    }
+
+    stage('Update Helm values (GitOps trigger)') {
+      steps {
+        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+          sh """
+            sed -i "s/tag: .*/tag: ${IMAGE_TAG}/" ${VALUES_FILE}
+            git config user.email 'jenkins@wastios.local'
+            git config user.name 'Jenkins CI'
+            git add ${VALUES_FILE}
+            git commit -m "ci: deploy build ${IMAGE_TAG}" || echo 'no changes to commit'
+            git push https://\$GITHUB_TOKEN@github.com/ShinichiShi/wastios.git HEAD:main
+          """
+        }
+      }
+    }
+  }
+}

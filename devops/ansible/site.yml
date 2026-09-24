@@ -1,0 +1,171 @@
+---
+- name: Configure DevOps tooling for the Wastios demo pipeline
+  hosts: local
+  gather_facts: false
+  vars:
+    jenkins_url: "http://localhost:8080"
+    git_repo_url: "https://github.com/ShinichiShi/wastios.git"
+    git_branch: "main"
+    jenkinsfile_path: "devops/jenkins/Jenkinsfile"
+    job_name: "wastios-pipeline"
+
+  tasks:
+    - name: Verify required CLI tools are installed
+      ansible.builtin.command: "which {{ item }}"
+      environment:
+        PATH: "/opt/sonar-scanner/bin:{{ lookup('env', 'PATH') }}"
+      register: tool_check
+      changed_when: false
+      loop:
+        - docker
+        - terraform
+        - ansible
+        - trivy
+        - kubectl
+        - minikube
+        - helm
+        - argocd
+        - sonar-scanner
+
+    - name: Report installed tool versions
+      ansible.builtin.debug:
+        msg: "{{ item.item }} -> {{ item.stdout }}"
+      loop: "{{ tool_check.results }}"
+
+    - name: Fetch Jenkins CSRF crumb
+      ansible.builtin.uri:
+        url: "{{ jenkins_url }}/crumbIssuer/api/json"
+        method: GET
+        user: "{{ jenkins_user }}"
+        password: "{{ jenkins_token }}"
+        force_basic_auth: true
+        return_content: true
+      register: crumb_response
+
+    - name: Check for existing Jenkins credentials
+      ansible.builtin.uri:
+        url: "{{ jenkins_url }}/credentials/store/system/domain/_/credential/{{ item }}/api/json"
+        method: GET
+        user: "{{ jenkins_user }}"
+        password: "{{ jenkins_token }}"
+        force_basic_auth: true
+        status_code: [200, 404]
+      loop:
+        - sonar-token
+        - nexus-registry
+        - github-token
+      register: cred_check
+
+    # Credentials are created via curl (not the uri module): Jenkins intermittently
+    # 500'd on uri-module POSTs to createCredentials in this environment, while an
+    # identical request via curl consistently succeeded.
+    - name: Create SonarQube token credential in Jenkins
+      ansible.builtin.command:
+        cmd: >
+          curl -sS -u {{ jenkins_user }}:{{ jenkins_token }}
+          -X POST {{ jenkins_url }}/credentials/store/system/domain/_/createCredentials
+          -H "{{ crumb_response.json.crumbRequestField }}: {{ crumb_response.json.crumb }}"
+          --data-urlencode json@-
+          -o /dev/null -w "%{http_code}"
+        stdin: "{{ cred_json | to_json }}"
+      vars:
+        cred_json:
+          credentials:
+            scope: GLOBAL
+            id: sonar-token
+            secret: "{{ sonarqube_token }}"
+            description: SonarQube analysis token
+            "$class": org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl
+      register: cred_sonar
+      changed_when: cred_sonar.stdout in ['200', '302']
+      failed_when: cred_sonar.stdout not in ['200', '302']
+      when: cred_check.results[0].status == 404
+
+    - name: Create Nexus registry credential in Jenkins
+      ansible.builtin.command:
+        cmd: >
+          curl -sS -u {{ jenkins_user }}:{{ jenkins_token }}
+          -X POST {{ jenkins_url }}/credentials/store/system/domain/_/createCredentials
+          -H "{{ crumb_response.json.crumbRequestField }}: {{ crumb_response.json.crumb }}"
+          --data-urlencode json@-
+          -o /dev/null -w "%{http_code}"
+        stdin: "{{ cred_json | to_json }}"
+      vars:
+        cred_json:
+          credentials:
+            scope: GLOBAL
+            id: nexus-registry
+            username: "{{ nexus_user }}"
+            password: "{{ nexus_password }}"
+            description: Nexus docker registry
+            "$class": com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl
+      register: cred_nexus
+      changed_when: cred_nexus.stdout in ['200', '302']
+      failed_when: cred_nexus.stdout not in ['200', '302']
+      when: cred_check.results[1].status == 404
+
+    - name: Create GitHub push token credential in Jenkins
+      ansible.builtin.command:
+        cmd: >
+          curl -sS -u {{ jenkins_user }}:{{ jenkins_token }}
+          -X POST {{ jenkins_url }}/credentials/store/system/domain/_/createCredentials
+          -H "{{ crumb_response.json.crumbRequestField }}: {{ crumb_response.json.crumb }}"
+          --data-urlencode json@-
+          -o /dev/null -w "%{http_code}"
+        stdin: "{{ cred_json | to_json }}"
+      vars:
+        cred_json:
+          credentials:
+            scope: GLOBAL
+            id: github-token
+            secret: "{{ github_token }}"
+            description: GitHub push token for GitOps commits
+            "$class": org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl
+      register: cred_github
+      changed_when: cred_github.stdout in ['200', '302']
+      failed_when: cred_github.stdout not in ['200', '302']
+      when: cred_check.results[2].status == 404
+
+    - name: Render Jenkins pipeline job config
+      ansible.builtin.template:
+        src: templates/jenkins-job-config.xml.j2
+        dest: "{{ job_config_path }}"
+        mode: "0600"
+
+    - name: Check if the pipeline job already exists
+      ansible.builtin.uri:
+        url: "{{ jenkins_url }}/job/{{ job_name }}/api/json"
+        method: GET
+        user: "{{ jenkins_user }}"
+        password: "{{ jenkins_token }}"
+        force_basic_auth: true
+        status_code: [200, 404]
+      register: job_exists
+
+    - name: Create the wastios-pipeline Jenkins job
+      ansible.builtin.command:
+        cmd: >
+          curl -sS -u {{ jenkins_user }}:{{ jenkins_token }}
+          -X POST "{{ jenkins_url }}/createItem?name={{ job_name }}"
+          -H "{{ crumb_response.json.crumbRequestField }}: {{ crumb_response.json.crumb }}"
+          -H "Content-Type: application/xml"
+          --data-binary @{{ job_config_path }}
+          -o /dev/null -w "%{http_code}"
+      register: job_create
+      changed_when: job_create.stdout == '200'
+      failed_when: job_create.stdout != '200'
+      when: job_exists.status == 404
+
+    - name: Update the wastios-pipeline Jenkins job (already existed)
+      ansible.builtin.command:
+        cmd: >
+          curl -sS -u {{ jenkins_user }}:{{ jenkins_token }}
+          -X POST "{{ jenkins_url }}/job/{{ job_name }}/config.xml"
+          -H "{{ crumb_response.json.crumbRequestField }}: {{ crumb_response.json.crumb }}"
+          -H "Content-Type: application/xml"
+          --data-binary @{{ job_config_path }}
+          -o /dev/null -w "%{http_code}"
+      register: job_update
+      changed_when: job_update.stdout == '200'
+      failed_when: job_update.stdout != '200'
+      when: job_exists.status == 200
