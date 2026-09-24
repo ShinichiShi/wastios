@@ -115,7 +115,13 @@ that single `docker push` succeeded in about a second once the earlier layers we
 already uploaded. Everything after that (loading the built images into minikube, bumping
 `devops/helm/wastios/values.yaml` to the new tag, and letting Argo CD sync it) completed
 normally. If you hit the same timeout on a from-scratch run, either give Docker Desktop
-more memory or add a `retry(2)` around the `docker push` stage in the Jenkinsfile.
+more memory, or rely on the `retry(2)` now wrapped around each `docker push` in the
+Jenkinsfile (added after this run, so future builds retry automatically).
+
+**End-to-end confirmed working**: build 3's images (tag `3`) are live in Nexus, loaded
+into minikube, and running as pods — `kubectl get pods -n default` shows
+`wastios-frontend` on the new tag and `Synced` status on the Argo CD `wastios`
+Application, entirely from a `git push` with no manual `kubectl apply`.
 
 ## How to test each component
 
