@@ -1,0 +1,34 @@
+registry: localhost:8082
+
+backend:
+  image: wastios-backend
+  tag: local
+  port: 3000
+  replicas: 1
+
+frontend:
+  image: wastios-frontend
+  tag: local
+  port: 80
+  replicas: 1
+
+mlService:
+  image: wastios-ml-service
+  tag: local
+  port: 8000
+  replicas: 1
+
+# Populate with real values to let the backend boot fully (Firebase + S3).
+# Left empty, the backend pod will crash-loop, which is a valid demo of
+# Alertmanager firing a "backend down" alert — see devops/docs/DEVOPS.md.
+backendSecret:
+  FIREBASE_PROJECT_ID: ""
+  FIREBASE_CLIENT_EMAIL: ""
+  FIREBASE_PRIVATE_KEY: ""
+  FIREBASE_STORAGE_BUCKET: ""
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+  S3_BUCKET_NAME: ""
+
+ingress:
+  host: wastios.local
