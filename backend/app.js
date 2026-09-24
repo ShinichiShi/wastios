@@ -3,6 +3,7 @@ const cors = require('cors');
 const express = require('express');
 const helmet = require('helmet');
 const http = require('http');
+const promClient = require('prom-client');
 
 const { env } = require('./src/config/env');
 const sensorRoutes = require('./src/routes/sensor');
@@ -15,6 +16,15 @@ const { initSocketServer } = require('./src/sockets/emitters');
 const app = express();
 const httpServer = http.createServer(app);
 const io = initSocketServer(httpServer);
+
+const metricsRegistry = new promClient.Registry();
+promClient.collectDefaultMetrics({ register: metricsRegistry });
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [metricsRegistry],
+});
 
 const corsOrigin = env.FRONTEND_URL === '*' ? true : env.FRONTEND_URL;
 
@@ -39,6 +49,19 @@ app.use(requestLogger);
 // Health endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+// Prometheus metrics
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on('finish', () => {
+    end({ method: req.method, route: req.path, status_code: res.statusCode });
+  });
+  next();
+});
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', metricsRegistry.contentType);
+  res.end(await metricsRegistry.metrics());
 });
 
 // API routes
