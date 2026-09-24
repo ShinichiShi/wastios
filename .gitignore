@@ -1,0 +1,46 @@
+# Node
+node_modules/
+npm-debug.log*
+dist/
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# ML artifacts
+ml/checkpoints/
+*.pth
+*.pt
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Ansible
+*.retry
+
+# Helm
+**/charts/*.tgz
+
+# Kubernetes / kubeconfig dumps
+kubeconfig*
+*.kubeconfig
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Logs
+*.log
