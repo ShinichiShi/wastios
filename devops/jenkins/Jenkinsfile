@@ -76,12 +76,12 @@ pipeline {
     stage('Push to Nexus') {
       steps {
         withCredentials([usernamePassword(credentialsId: 'nexus-registry', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-          sh """
-            echo \$NEXUS_PASS | docker login ${REGISTRY} -u \$NEXUS_USER --password-stdin
-            docker push ${REGISTRY}/wastios-backend:${IMAGE_TAG}
-            docker push ${REGISTRY}/wastios-frontend:${IMAGE_TAG}
-            docker push ${REGISTRY}/wastios-ml-service:${IMAGE_TAG}
-          """
+          sh "echo \$NEXUS_PASS | docker login ${REGISTRY} -u \$NEXUS_USER --password-stdin"
+          // ml_service bundles PyTorch/CUDA (~9GB); under local resource
+          // contention its push can hit a transient upload timeout, so retry.
+          retry(2) { sh "docker push ${REGISTRY}/wastios-backend:${IMAGE_TAG}" }
+          retry(2) { sh "docker push ${REGISTRY}/wastios-frontend:${IMAGE_TAG}" }
+          retry(2) { sh "docker push ${REGISTRY}/wastios-ml-service:${IMAGE_TAG}" }
         }
       }
     }
