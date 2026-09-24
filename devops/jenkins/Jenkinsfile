@@ -2,9 +2,16 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY   = 'localhost:8082'
-    IMAGE_TAG  = "${env.BUILD_NUMBER}"
-    VALUES_FILE = 'devops/helm/wastios/values.yaml'
+    REGISTRY     = 'localhost:8082'
+    IMAGE_TAG    = "${env.BUILD_NUMBER}"
+    VALUES_FILE  = 'devops/helm/wastios/values.yaml'
+    // Jenkins runs as its own system user; these point it at the shared
+    // Docker Desktop socket, minikube cluster, and sonar-scanner install
+    // that live under the primary user's home directory.
+    DOCKER_HOST   = 'unix:///home/shinichi/.docker/desktop/docker.sock'
+    KUBECONFIG    = '/home/shinichi/.kube/config'
+    MINIKUBE_HOME = '/home/shinichi'
+    PATH          = "/opt/sonar-scanner/bin:/usr/local/bin:${env.PATH}"
   }
 
   stages {
